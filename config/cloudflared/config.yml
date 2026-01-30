@@ -1,0 +1,15 @@
+ingress:
+  # portfolio
+  - hostname: h3nc4.com
+    service: http://h3nc4:80
+
+  # WASudoku
+  - hostname: wasudoku.h3nc4.com
+    service: http://wasudoku:80
+
+  # cgit
+  - hostname: git.h3nc4.com
+    service: http://cgit:80
+
+  # catch-all rule
+  - service: http_status:404

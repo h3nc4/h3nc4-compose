@@ -1,0 +1,69 @@
+home server deploy
+==================
+
+GitOps-based deployment infra for home server.
+
+Setup Deployment Key
+--------------------
+
+    # Generate an SSH key for deployment
+    ssh-keygen -t ed25519 -f /home/dev/.ssh/id_deploy -N "" -C "deploy"
+
+Install update script
+---------------------
+
+    # touch /var/log/home-server-deploy.log
+    # chown dev:dev /var/log/home-server-deploy.log
+
+    $ crontab -e
+
+    # Add the following line to run cron.sh every hour
+    0 * * * * /<path to repo>/cron.sh
+
+To setup a hidden service
+-------------------------
+
+    doas mkdir -p data/tor/my-hidden-service
+    doas cp ./myservice.onion/* data/tor/my-hidden-service/
+    doas chmod 700 data/tor/my-hidden-service
+    doas chmod 600 data/tor/my-hidden-service/*
+    doas chown -R 65534:65534 data/tor/
+
+Setup cgit
+----------
+
+    # Create directories for git data and ssh keys
+    mkdir -p data/cgit/git data/cgit/ssh
+
+    # Generate SSH key for git mirroring
+    ssh-keygen -t ed25519 -f data/cgit/ssh/id_ed25519 -N "" -C "mirror"
+
+    # Set ownership
+    chown -R 1000:1000 data/cgit
+
+    # Add repositories to config/cgit/repos.list
+
+Setup tddns
+-----------
+
+    mkdir -p data/tddns
+    chown 65534:65534 data/tddns
+
+Setup SSL
+-------------
+
+    mkdir -p data/certbot/certs data/certbot/logs
+
+    docker run --rm -it -v "${PWD}/data/certbot/certs/:/etc/letsencrypt/" -v "${PWD}/data/certbot/logs/:/var/log/letsencrypt/" -p 80:80 certbot/certbot certonly --standalone -d mail.h3nc4.com
+
+tddns Cloudflare API Token
+-----------------------------
+    Create a Cloudflare API token with DNS edit permissions.
+
+    In Cloudflare dashboard, go to  Profile -> API Tokens -> Create Token -> Create Custom Token
+    Permissions:
+      Zone    Read
+      DNS     Edit
+
+    Zone Resources:
+    Include -> Specific zone -> mydomain.com

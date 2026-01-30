@@ -1,0 +1,8 @@
+# Basic Configuration
+DataDirectory /var/lib/tor
+Log notice stdout
+
+# Main Hidden Service
+# Onion: h3nc4cd73utflolf2uxgws3j6rmgzotlwndukabzgzawpzk5fejws5id.onion
+HiddenServiceDir /var/lib/tor/h3nc4_service/
+HiddenServicePort 80 tor-reverse-proxy:80

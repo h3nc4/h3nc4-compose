@@ -1,0 +1,207 @@
+# Copyright (C) 2025-2026  Henrique Almeida
+# This file is part of h3nc4-compose.
+#
+# h3nc4-compose is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# h3nc4-compose is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with h3nc4-compose.  If not, see <https://www.gnu.org/licenses/>.
+
+name: h3nc4-compose
+
+networks:
+  exposed:
+    name: exposed
+    driver: bridge
+    internal: false
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "false"
+
+  external:
+    name: external
+    driver: bridge
+    internal: false
+
+  internal:
+    name: internal
+    driver: bridge
+    internal: true
+
+services:
+  maddy:
+    image: foxcpp/maddy:0.8@sha256:eeb5813fc4d101ec5d8f7b08b7255fd76ced2a06884ea94450c8a9a22fd6a08d
+    container_name: maddy
+    restart: always
+    environment:
+      - MADDY_HOSTNAME=${MADDY_HOSTNAME}
+      - MADDY_DOMAIN=${MADDY_DOMAIN}
+      - SMTP_RELAY_HOST=${SMTP_RELAY_HOST}
+      - SMTP_RELAY_USER=${SMTP_RELAY_USER}
+      - SMTP_RELAY_PASSWORD=${SMTP_RELAY_PASSWORD}
+    ports:
+      - "[::]:25:25" # SMTP
+      - "[::]:587:587" # Submission
+      - "[::]:993:993" # IMAP
+    volumes:
+      - ./data/maddy:/data
+      - ./config/maddy/maddy.conf:/data/maddy.conf
+      - ./data/certbot/certs/:/etc/letsencrypt/
+    networks:
+      - internal
+      - exposed
+
+  tddns:
+    container_name: tddns
+    image: h3nc4/tddns@sha256:a8a35d64e0483fa6347820a7fa6b94d7cce12d49b2106238c0c59dded3dd8804
+    restart: always
+    profiles:
+      - production
+    network_mode: "host"
+    environment:
+      - CF_TOKEN=${CF_TOKEN}
+      - DOMAIN=${DOMAIN}
+      - RECORD_TYPE=${RECORD_TYPE}
+    volumes:
+      - ./data/tddns:/var/run
+    cap_drop:
+      - ALL
+
+  cloudflared:
+    container_name: cloudflared
+    image: cloudflare/cloudflared@sha256:e9bcb2ef08d25632ff74344e73a025f4f4bf12718335b196fa0e670cacace8c5
+    restart: always
+    profiles:
+      - production
+    read_only: true
+    command: tunnel --config /etc/cloudflared/config.yml run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    volumes:
+      - ./config/cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    networks:
+      - internal
+      - external
+
+  h3nc4:
+    container_name: h3nc4
+    domainname: h3nc4.com
+    image: h3nc4/portfolio@sha256:718aefaa4cac90efeb4402deaf0635bc02c581da8cce83f9924c2c3bea5a6161
+    restart: always
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+
+  wasudoku:
+    container_name: wasudoku
+    hostname: wasudoku
+    domainname: h3nc4.com
+    image: h3nc4/wasudoku@sha256:9fa5900def955e5c5646349870bd8bf5dfd0efffa6e7659d1213b40cf9e61ec4
+    restart: always
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal
+
+  cgit:
+    container_name: cgit
+    image: h3nc4/cgit-slim@sha256:2dac29e00af01c1cb77ee3faa7cb437b48dc67a7aa5a7a309f65a1c7aafce0ba
+    restart: always
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./config/cgit/repos.list:/etc/cgit/repos.list:ro
+      - ./data/cgit/git:/var/lib/git
+      - ./data/cgit/ssh/id_ed25519:/run/.ssh/id_ed25519
+      - ./data/cgit/ssh/id_ed25519.pub:/run/.ssh/id_ed25519.pub
+    extra_hosts:
+      - "github.com:4.228.31.150"
+    networks:
+      - internal
+      - external
+
+  tor:
+    container_name: tor
+    image: h3nc4/tor-slim@sha256:e78283e3b3b3f596d21e48c9d15bcc8e2e25346f4342a2f2320814333187869b
+    restart: always
+    profiles:
+      - production
+    read_only: true
+    user: "65534:65534"
+    cap_drop:
+      - ALL
+      - MKNOD
+    security_opt:
+      - no-new-privileges:true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config/tor/torrc:/etc/tor/torrc:ro
+      - ./data/tor:/var/lib/tor
+    networks:
+      - internal
+      - external
+
+  tor-reverse-proxy:
+    container_name: tor-reverse-proxy
+    image: h3nc4/nginx-slim@sha256:350019151689a674d2baeefac77e2df8ac73167a2eeba4ca44ebced9713f579c
+    restart: always
+    volumes:
+      - ./config/tor/nginx.conf:/etc/nginx.conf:ro
+    networks:
+      - internal
+
+  telegram-scout:
+    container_name: telegram-scout
+    image: h3nc4/telegram-scout
+    restart: always
+    profiles:
+      - production
+    environment:
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - TELEGRAM_PHONE=${TELEGRAM_PHONE}
+      - TELEGRAM_PASSWORD=${TELEGRAM_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - TELEGRAM_SESSION=${TELEGRAM_SESSION}
+    volumes:
+      - ./config/telegram-scout/config.yaml:/config.yaml:ro
+    networks:
+      - external
+
+  syshealthcheck:
+    container_name: syshealthcheck
+    image: busybox:musl@sha256:03db190ed4c1ceb1c55d179a0940e2d71d42130636a780272629735893292223
+    volumes:
+      - ./test.sh:/test.sh:ro
+    command: /test.sh
+    environment:
+      - CI=${CI:-false}
+    healthcheck:
+      test: [ "CMD", "test", "-f", "/healthy" ]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+      start_period: 1s
+    depends_on:
+      - maddy
+      - cgit
+      - h3nc4
+      - wasudoku
+      - tor-reverse-proxy
+    networks:
+      - internal

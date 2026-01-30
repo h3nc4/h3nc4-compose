@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+
+      - name: Prepare environment
+        run: |
+          # Create data directories
+          mkdir -p data/cgit/git data/cgit/ssh
+          mkdir -p data/maddy
+          mkdir -p data/certbot/certs/live/mail.example.com
+          mkdir -p data/tor
+          mkdir -p data/tddns
+
+          # Generate dummy SSH key for cgit
+          ssh-keygen -t ed25519 -f data/cgit/ssh/id_ed25519 -N "" -C "mirror"
+
+          # Fix permissions for cgit
+          sudo chown -R 1000:1000 data/cgit
+
+          # Fix permissions for tddns and tor
+          sudo chown -R 65534:65534 data/tddns data/tor
+
+          # Generate dummy SSL certs for maddy
+          openssl req -x509 -newkey rsa:4096 -keyout data/certbot/certs/live/mail.example.com/privkey.pem -out data/certbot/certs/live/mail.example.com/fullchain.pem -days 365 -nodes -subj "/CN=mail.example.com"
+
+          # Create dummy .env
+          cat <<EOF > .env
+          TUNNEL_TOKEN=dummy
+          MADDY_HOSTNAME=mail.example.com
+          MADDY_DOMAIN=example.com
+          SMTP_RELAY_HOST=smtp.example.com:587
+          SMTP_RELAY_USER=user
+          SMTP_RELAY_PASSWORD=pass
+          CF_TOKEN=dummy
+          DOMAIN=example.com
+          RECORD_TYPE=BOTH
+          EOF
+
+      - name: Run tests
+        run: docker compose up --abort-on-container-exit --exit-code-from syshealthcheck
